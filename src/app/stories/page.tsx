@@ -8,16 +8,15 @@ import { AppShell } from "@/components/AppShell";
 import { Avatar } from "@/components/Avatar";
 import { ClientTimestamp } from "@/components/ClientTimestamp";
 import { PageHeader } from "@/components/PageHeader";
-import { SIM_USERS } from "@/lib/mock-data";
 import { useVybeStore } from "@/store/useVybeStore";
-import type { StoryItem } from "@/types";
+import type { PublicProfile, StoryItem } from "@/types";
 
 const STORY_COLORS = ["#1686ff", "#0d47a1", "#075985", "#0f3d63", "#102a43", "#0b132b"];
 const REACTIONS = ["💙", "😂", "🔥", "👏", "😮"];
 
 export default function StoriesPage() {
   const stories = useVybeStore((state) => state.stories).filter((story) => new Date(story.expiresAt) > new Date());
-  const people = useVybeStore((state) => state.dataMode === "demo" ? SIM_USERS : state.people);
+  const people = useVybeStore((state) => state.people);
   const currentUserId = useVybeStore((state) => state.currentUserId || "me");
   const profile = useVybeStore((state) => state.profile);
   const settings = useVybeStore((state) => state.settings);
@@ -78,7 +77,7 @@ function StoryComposer({ onClose, onCreate }: { onClose: () => void; onCreate: (
     <div className="mt-4 flex items-center justify-between gap-3"><div className="flex gap-2">{STORY_COLORS.map((value) => <button key={value} onClick={() => setColor(value)} aria-label={`Choose ${value} background`} className={`h-8 w-8 rounded-full border-2 ${color === value ? "border-white ring-2 ring-blue-400" : "border-transparent"}`} style={{ background: value }} />)}</div><button disabled={posting || (type === "text" ? !text.trim() : !file)} onClick={() => void publish()} className="vybe-button rounded-2xl bg-blue-600 px-5 py-3 font-black text-white disabled:opacity-40">{posting ? "Sharing…" : "Share story"}</button></div></motion.div></motion.div>;
 }
 
-function StoryViewer({ story, owner, mine, onClose, onPrevious, onNext, hasPrevious, hasNext, onReact, reply, setReply, onReply, onDelete }: { story: StoryItem; owner?: ReturnType<typeof SIM_USERS.find>; mine: boolean; onClose: () => void; onPrevious: () => void; onNext: () => void; hasPrevious: boolean; hasNext: boolean; onReact: (emoji: string) => void; reply: string; setReply: (value: string) => void; onReply: () => void; onDelete: () => void }) {
+function StoryViewer({ story, owner, mine, onClose, onPrevious, onNext, hasPrevious, hasNext, onReact, reply, setReply, onReply, onDelete }: { story: StoryItem; owner?: PublicProfile; mine: boolean; onClose: () => void; onPrevious: () => void; onNext: () => void; hasPrevious: boolean; hasNext: boolean; onReact: (emoji: string) => void; reply: string; setReply: (value: string) => void; onReply: () => void; onDelete: () => void }) {
   return <motion.div className="fixed inset-0 z-[95] grid place-items-center bg-black/90 p-2 backdrop-blur-xl sm:p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><div className="relative flex h-[min(90vh,760px)] w-full max-w-md flex-col overflow-hidden rounded-[32px] border border-white/10 bg-[#06101d] shadow-2xl"><div className="absolute inset-x-3 top-3 z-20 h-1 overflow-hidden rounded-full bg-white/20"><motion.div key={story.id} className="h-full bg-white" initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: 8, ease: "linear" }} onAnimationComplete={hasNext ? onNext : onClose} /></div><header className="absolute inset-x-0 top-0 z-20 flex items-center gap-3 bg-gradient-to-b from-black/70 to-transparent px-4 pb-8 pt-7"><Avatar user={owner} size="sm" showStatus={false} /><div className="min-w-0 flex-1"><p className="font-black text-white">{mine ? "Your story" : owner?.username || "VYBE friend"}</p><p className="text-[10px] text-white/65"><ClientTimestamp value={story.createdAt} format="time" /></p></div>{mine && <button onClick={onDelete} className="grid h-9 w-9 place-items-center rounded-xl bg-black/25 text-red-300" aria-label="Delete story"><Trash2 size={16} /></button>}<button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-xl bg-black/25 text-white" aria-label="Close story"><X size={17} /></button></header>
     <div className="relative flex flex-1 items-center justify-center overflow-hidden" style={{ background: story.backgroundColor }}>{story.mediaType === "photo" && story.mediaUrl ? <Image src={story.mediaUrl} alt="Story" fill sizes="430px" className="object-contain" unoptimized /> : story.mediaType === "video" && story.mediaUrl ? <video src={story.mediaUrl} autoPlay playsInline controls={false} controlsList="nodownload" className="h-full w-full object-contain" onContextMenu={(event) => event.preventDefault()} /> : null}{story.text && <p className={`relative z-10 max-w-[85%] whitespace-pre-wrap text-center font-black text-white drop-shadow-xl ${story.mediaType === "text" ? "text-3xl" : "rounded-2xl bg-black/35 p-4 text-lg backdrop-blur-sm"}`}>{story.text}</p>}</div>
     {hasPrevious && <button onClick={onPrevious} className="absolute left-2 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-black/25 text-white" aria-label="Previous story"><ChevronLeft /></button>}{hasNext && <button onClick={onNext} className="absolute right-2 top-1/2 z-20 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-black/25 text-white" aria-label="Next story"><ChevronRight /></button>}

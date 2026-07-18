@@ -4,9 +4,9 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { MessageCircle, MoreHorizontal } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
-import { SimUser } from "@/types";
+import { PublicProfile } from "@/types";
 
-export function PersonRow({ user, subtitle, meta, badge, action, menu }: { user: SimUser; subtitle?: string; meta?: ReactNode; badge?: number; action?: { label: string; href?: string; onClick?: () => void }; menu?: () => void }) {
+export function PersonRow({ user, subtitle, meta, badge, action, menu }: { user: PublicProfile; subtitle?: string; meta?: ReactNode; badge?: number; action?: { label: string; href?: string; onClick?: () => void }; menu?: () => void }) {
   const actionClasses = "vybe-button shrink-0 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-black text-white shadow-[0_0_20px_rgba(37,99,235,.15)] hover:bg-blue-500";
   return (
     <div className="group flex w-full min-w-0 items-center gap-3 rounded-[20px] border border-white/[.07] bg-white/[.025] p-3.5 transition duration-300 hover:-translate-y-0.5 hover:border-blue-400/20 hover:bg-white/[.045]">

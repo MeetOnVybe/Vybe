@@ -31,7 +31,7 @@ import {
   BANNER_OPTIONS,
   INTERESTS,
   PROFILE_STATUSES,
-} from "@/lib/mock-data";
+} from "@/lib/profile-options";
 import { useVybeStore } from "@/store/useVybeStore";
 import { CurrentProfile, Interest } from "@/types";
 
@@ -88,7 +88,6 @@ function ProfileEditor({
   const [uploading, setUploading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const bannerInput = useRef<HTMLInputElement>(null);
-  const dataMode = useVybeStore((state) => state.dataMode);
   const uploadProfileMedia = useVybeStore((state) => state.uploadProfileMedia);
   const deleteProfileMedia = useVybeStore((state) => state.deleteProfileMedia);
 
@@ -96,7 +95,7 @@ function ProfileEditor({
     kind: "avatar" | "banner",
     path?: string | null,
   ) => {
-    if (dataMode !== "supabase" || !path) return;
+    if (!path) return;
     setUploading(true);
     try {
       await deleteProfileMedia(kind, path);
@@ -133,9 +132,8 @@ function ProfileEditor({
       setFileError(`Keep the ${kind} image under ${maxSize} MB.`);
       return;
     }
-    if (dataMode === "supabase") {
-      setUploading(true);
-      try {
+    setUploading(true);
+    try {
         const previousPath =
           kind === "avatar" ? draft.profileImagePath : draft.bannerPath;
         const path = await uploadProfileMedia(kind, file, previousPath);
@@ -147,26 +145,8 @@ function ProfileEditor({
         );
       } catch (cause) {
         setFileError(cause instanceof Error ? cause.message : "Upload failed");
-      } finally {
-        setUploading(false);
-      }
-    } else {
-      const reader = new FileReader();
-      reader.onload = () =>
-        setDraft((current) =>
-          kind === "avatar"
-            ? {
-                ...current,
-                profileImage: String(reader.result),
-                profileImagePath: null,
-              }
-            : {
-                ...current,
-                bannerChoice: String(reader.result),
-                bannerPath: null,
-              },
-        );
-      reader.readAsDataURL(file);
+    } finally {
+      setUploading(false);
     }
     event.target.value = "";
   };
@@ -218,11 +198,7 @@ function ProfileEditor({
       <PageHeader
         eyebrow="Your identity"
         title="Build your VYBE profile"
-        description={
-          dataMode === "supabase"
-            ? "Customize your cloud profile. Photos, banners, interests, and details sync through Supabase."
-            : "Customize what people see before they add you. Demo data stays in this browser."
-        }
+        description="Customize your cloud profile. Photos, banners, interests, and details sync through Supabase."
         action={
           <button
             disabled={saving || uploading}
@@ -824,7 +800,7 @@ function ProfileEditor({
       <section className="vybe-card mt-5 rounded-[30px] p-5 sm:p-6">
         <h2 className="text-lg font-black">Your interests</h2>
         <p className="mt-1 text-xs text-slate-500">
-          Shared interests shape your simulated VYBE Match score.
+          Shared interests shape your deterministic VYBE compatibility score.
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           {INTERESTS.map((interest) => {
@@ -854,14 +830,10 @@ function ProfileEditor({
         <div className="rounded-[24px] border border-white/8 bg-white/[.025] p-5">
           <Sparkles className="text-blue-400" />
           <h3 className="mt-3 font-black">
-            {dataMode === "supabase"
-              ? "Cloud profile enabled"
-              : "Local persistence enabled"}
+            Cloud profile enabled
           </h3>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            {dataMode === "supabase"
-              ? "Your profile, private media paths, and interests sync securely to your account."
-              : "Your image, banner, bio, status, and interests remain after refresh on this browser."}
+            Your profile, private media paths, and interests sync securely to your account.
           </p>
         </div>
       </section>

@@ -55,13 +55,12 @@ export function ReportModal({
   onClose: () => void;
   userId: string;
   username: string;
-  targetType?: "profile" | "message" | "story" | "group" | "video_session";
+  targetType?: "profile" | "message" | "story" | "group" | "video_session" | "group_video_session";
   targetId?: string;
   afterSubmit?: () => void;
 }) {
   const reportUser = useVybeStore((state) => state.reportUser);
   const reportContent = useVybeStore((state) => state.reportContent);
-  const dataMode = useVybeStore((state) => state.dataMode);
   const [reason, setReason] = useState("Inappropriate behavior");
   const [notes, setNotes] = useState("");
   const submit = () => {
@@ -83,9 +82,7 @@ export function ReportModal({
           <div>
             <h2 className="text-xl font-black">Report {username}</h2>
             <p className="mt-1 text-sm text-[var(--muted)]">
-              {dataMode === "supabase"
-                ? "Your report is stored privately for moderation review."
-                : "This demo stores reports locally."}
+              Your report is stored privately for moderation review.
             </p>
           </div>
         </div>

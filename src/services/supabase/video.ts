@@ -3,6 +3,7 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import type { VideoService } from "@/services/contracts";
+import { invokeAuthenticatedFunction } from "@/lib/supabase/functions";
 import type {
   Interest,
   VideoMatchPreferences,
@@ -82,7 +83,9 @@ async function mapSession(client: SupabaseClient, value: unknown): Promise<Video
 
 class SupabaseVideoService implements VideoService {
   provider = "livekit" as const;
-  private client = createClient();
+  private get client() {
+    return createClient();
+  }
   private lastQueueFingerprint = "";
 
   private log(event: string, details: Record<string, unknown> = {}) {
@@ -242,11 +245,13 @@ class SupabaseVideoService implements VideoService {
   }
 
   async moderateFrame(sessionId: string, frameDataUrl: string) {
-    const { data, error } = await this.client.functions.invoke("moderate-content", {
-      body: { action: "moderate_video_frame", sessionId, frameDataUrl },
-    });
-    assertNoError(error, "Unable to run video safety check");
-    return { hidden: Boolean(data?.hidden), flagged: Boolean(data?.flagged) };
+    const data = await invokeAuthenticatedFunction<{ hidden?: boolean; flagged?: boolean }>(
+      this.client,
+      "moderate-content",
+      { action: "moderate_video_frame", sessionId, frameDataUrl },
+      "Unable to run video safety check",
+    );
+    return { hidden: Boolean(data.hidden), flagged: Boolean(data.flagged) };
   }
 
   async subscribeQueue(onChange: () => void) {

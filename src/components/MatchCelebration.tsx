@@ -4,9 +4,9 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { Heart, MessageCircle, Sparkles, X } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
-import type { SimUser } from "@/types";
+import type { PublicProfile } from "@/types";
 
-export function MatchCelebration({ user, onClose }: { user: SimUser | null; onClose: () => void }) {
+export function MatchCelebration({ user, onClose }: { user: PublicProfile | null; onClose: () => void }) {
   return <AnimatePresence>{user && <motion.div className="fixed inset-0 z-[110] grid place-items-center bg-black/70 p-4 backdrop-blur-xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-modal="true" aria-label="New VYBE match">
     <motion.div initial={{ scale: .78, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: .92, opacity: 0 }} transition={{ type: "spring", stiffness: 260, damping: 20 }} className="vybe-card relative w-full max-w-md overflow-hidden rounded-[36px] p-7 text-center sm:p-9">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_15%,rgba(28,134,255,.25),transparent_42%)]" />

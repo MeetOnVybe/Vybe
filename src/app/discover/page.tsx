@@ -7,12 +7,11 @@ import { AppShell } from "@/components/AppShell";
 import { DiscoveryCard } from "@/components/DiscoveryCard";
 import { MatchCelebration } from "@/components/MatchCelebration";
 import { PageHeader } from "@/components/PageHeader";
-import { INTERESTS, SIM_USERS } from "@/lib/mock-data";
+import { INTERESTS } from "@/lib/profile-options";
 import { useVybeStore } from "@/store/useVybeStore";
 import type { DiscoverySort, Interest } from "@/types";
 
 export default function DiscoverPage() {
-  const dataMode = useVybeStore((state) => state.dataMode);
   const people = useVybeStore((state) => state.people);
   const profiles = useVybeStore((state) => state.discoveryProfiles);
   const loading = useVybeStore((state) => state.discoveryLoading);
@@ -26,7 +25,7 @@ export default function DiscoverPage() {
   const undo = useVybeStore((state) => state.undoPass);
   const closeCelebration = useVybeStore((state) => state.dismissMatchCelebration);
   const current = profiles[0];
-  const celebrationUser = [...profiles, ...people, ...SIM_USERS].find((user) => user.id === celebrationId) || null;
+  const celebrationUser = [...profiles, ...people].find((user) => user.id === celebrationId) || null;
 
   useEffect(() => { void loadDiscovery(); }, [loadDiscovery]);
   useEffect(() => {
@@ -43,7 +42,7 @@ export default function DiscoverPage() {
   const toggleInterest = (interest: Interest) => setFilters({ interests: filters.interests.includes(interest) ? filters.interests.filter((item) => item !== interest) : [...filters.interests, interest] });
 
   return <AppShell>
-    <PageHeader eyebrow="Same-bracket social discovery" title="Discover your next VYBE" description={dataMode === "supabase" ? "Browse eligible real profiles. Blocks, visibility, decisions, and age isolation are enforced in Postgres and RLS." : "Explore the local Phase 3 discovery simulation. Production uses the Supabase discovery RPC."} />
+    <PageHeader eyebrow="Same-bracket social discovery" title="Discover your next VYBE" description="Browse eligible real profiles. Blocks, visibility, decisions, and age isolation are enforced in Postgres and RLS." />
 
     <section className="vybe-card mb-5 rounded-[28px] p-4 sm:p-5">
       <div className="flex items-center gap-2"><SlidersHorizontal size={18} className="text-blue-400" /><h2 className="font-black">Discovery filters</h2></div>

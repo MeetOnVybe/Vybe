@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { SimUser } from "@/types";
+import { PublicProfile } from "@/types";
 
 export function Avatar({
   user,
@@ -8,7 +8,7 @@ export function Avatar({
   imageSrc,
   alt,
 }: {
-  user?: SimUser;
+  user?: PublicProfile;
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   showStatus?: boolean;
   imageSrc?: string;

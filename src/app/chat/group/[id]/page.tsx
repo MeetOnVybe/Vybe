@@ -11,9 +11,10 @@ import { Avatar } from "@/components/Avatar";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { VoiceDraft, VoiceRecorder } from "@/components/chat/VoiceRecorder";
 import { getSupabasePlatformService } from "@/services";
-import { SIM_USERS } from "@/lib/mock-data";
 import { useVybeStore } from "@/store/useVybeStore";
-import type { Message, SimUser } from "@/types";
+import type { Message, PublicProfile } from "@/types";
+
+const EMPTY_GROUP_MESSAGES: Message[] = [];
 
 function dayLabel(value: string) { return new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric" }).format(new Date(value)); }
 
@@ -21,11 +22,10 @@ export default function GroupChatPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params.id;
-  const dataMode = useVybeStore((state) => state.dataMode);
   const currentUserId = useVybeStore((state) => state.currentUserId || "me");
   const group = useVybeStore((state) => state.groups.find((item) => item.id === id));
-  const messages = useVybeStore((state) => state.groupMessages[id] || []);
-  const people = useVybeStore((state) => dataMode === "demo" ? SIM_USERS : state.people);
+  const messages = useVybeStore((state) => state.groupMessages[id] || EMPTY_GROUP_MESSAGES);
+  const people = useVybeStore((state) => state.people);
   const settings = useVybeStore((state) => state.settings);
   const mutedIds = useVybeStore((state) => state.mutedConversationIds);
   const sendGroupMessage = useVybeStore((state) => state.sendGroupMessage);
@@ -53,17 +53,17 @@ export default function GroupChatPage() {
   const isMuted = mutedIds.includes(id) || group?.muted;
   const isOwner = group?.ownerId === currentUserId || group?.ownerId === "me";
   const active = Boolean(group?.memberIds.includes(currentUserId) || group?.memberIds.includes("me"));
-  const members = useMemo(() => group?.memberIds.filter((memberId) => memberId !== currentUserId && memberId !== "me").map((memberId) => people.find((person) => person.id === memberId)).filter((person): person is SimUser => Boolean(person)) || [], [currentUserId, group?.memberIds, people]);
+  const members = useMemo(() => group?.memberIds.filter((memberId) => memberId !== currentUserId && memberId !== "me").map((memberId) => people.find((person) => person.id === memberId)).filter((person): person is PublicProfile => Boolean(person)) || [], [currentUserId, group?.memberIds, people]);
   const firstUnread = messages.findIndex((message) => !message.read && message.senderId !== currentUserId && message.senderId !== "me");
 
   useEffect(() => { if (active) void markRead(id); }, [active, id, markRead, messages.length]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: settings.animationsEnabled ? "smooth" : "auto" }); }, [messages.length, settings.animationsEnabled, typingIds.length]);
   useEffect(() => {
-    if (dataMode !== "supabase" || !active) return;
+    if (!active) return;
     let mounted = true;
     void getSupabasePlatformService().subscribeTyping(id, (userId, typing) => { if (!mounted) return; setTypingIds((current) => typing ? Array.from(new Set([...current, userId])) : current.filter((item) => item !== userId)); }).then((channel) => { if (!mounted) void channel.unsubscribe(); else typingChannel.current = channel; });
     return () => { mounted = false; if (typingChannel.current) void typingChannel.current.unsubscribe(); if (typingTimer.current) window.clearTimeout(typingTimer.current); typingChannel.current = null; };
-  }, [active, dataMode, id]);
+  }, [active, id]);
 
   if (!group) return <AppShell><div className="vybe-card grid min-h-[60vh] place-items-center rounded-[30px] p-8 text-center"><div><ShieldAlert className="mx-auto text-blue-400" /><h1 className="mt-4 text-xl font-black">Group unavailable</h1><p className="mt-2 text-sm text-slate-500">It may have been deleted, or you no longer have access.</p><Link href="/groups" className="vybe-button mt-5 inline-flex rounded-2xl bg-blue-600 px-5 py-3 font-black text-white">Back to groups</Link></div></div></AppShell>;
   if (!active) return <AppShell><div className="vybe-card grid min-h-[60vh] place-items-center rounded-[30px] p-8 text-center"><div><UsersRound className="mx-auto text-blue-400" /><h1 className="mt-4 text-xl font-black">Invite pending</h1><p className="mt-2 text-sm text-slate-500">Join this group from the Groups page before opening its messages.</p><Link href="/groups" className="vybe-button mt-5 inline-flex rounded-2xl bg-blue-600 px-5 py-3 font-black text-white">Review invite</Link></div></div></AppShell>;
@@ -87,7 +87,7 @@ export default function GroupChatPage() {
   </AppShell>;
 }
 
-function GroupSettings({ group, members, currentUserId, isOwner, onClose, onUpdate, onRemove, onLeave, onReport }: { group: NonNullable<ReturnType<typeof useVybeStore.getState>["groups"][number]>; members: Array<NonNullable<ReturnType<typeof SIM_USERS.find>>>; currentUserId: string; isOwner: boolean; onClose: () => void; onUpdate: (id: string, title?: string, file?: File) => Promise<void>; onRemove: (groupId: string, memberId: string) => Promise<void>; onLeave: () => Promise<void>; onReport: () => void }) {
+function GroupSettings({ group, members, currentUserId, isOwner, onClose, onUpdate, onRemove, onLeave, onReport }: { group: NonNullable<ReturnType<typeof useVybeStore.getState>["groups"][number]>; members: PublicProfile[]; currentUserId: string; isOwner: boolean; onClose: () => void; onUpdate: (id: string, title?: string, file?: File) => Promise<void>; onRemove: (groupId: string, memberId: string) => Promise<void>; onLeave: () => Promise<void>; onReport: () => void }) {
   const [title, setTitle] = useState(group.title); const [file, setFile] = useState<File>(); const [saving, setSaving] = useState(false);
   return <SimpleModal title="Group settings" onClose={onClose}><div className="flex items-center gap-4"><label className="relative grid h-20 w-20 cursor-pointer place-items-center overflow-hidden rounded-[24px] bg-gradient-to-br from-blue-400 to-blue-900 text-white">{file ? <Image src={URL.createObjectURL(file)} alt="" fill className="object-cover" unoptimized /> : group.iconUrl ? <Image src={group.iconUrl} alt="" fill className="object-cover" unoptimized /> : <UsersRound />}{isOwner && <input type="file" accept="image/*" className="hidden" onChange={(event) => setFile(event.target.files?.[0])} />}</label><div className="min-w-0 flex-1"><p className="text-xs font-black uppercase tracking-wider text-blue-400">{isOwner ? "Owner controls" : "Group info"}</p>{isOwner ? <input value={title} onChange={(event) => setTitle(event.target.value)} className="vybe-input mt-2" maxLength={50} /> : <h3 className="mt-2 text-xl font-black">{group.title}</h3>}</div></div>{isOwner && <button disabled={saving || !title.trim()} onClick={() => { setSaving(true); void onUpdate(group.id, title, file).finally(() => setSaving(false)); }} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 py-3 font-black text-white"><Pencil size={16} /> {saving ? "Saving…" : "Save group"}</button>}<h3 className="mt-6 text-xs font-black uppercase tracking-[.15em] text-slate-500">Members</h3><div className="mt-3 space-y-2">{members.map((member) => <div key={member.id} className="flex items-center gap-3 rounded-2xl border border-white/[.07] p-3"><Avatar user={member} size="sm" /><div className="min-w-0 flex-1"><p className="font-black">{member.username}</p><p className="text-xs text-slate-500">{member.status}</p></div>{isOwner && member.id !== currentUserId && <button onClick={() => void onRemove(group.id, member.id)} className="grid h-9 w-9 place-items-center rounded-xl text-red-400 hover:bg-red-500/10" aria-label={`Remove ${member.username}`}><UserMinus size={16} /></button>}</div>)}</div><div className="mt-5 grid grid-cols-2 gap-2"><button onClick={onReport} className="inline-flex items-center justify-center gap-2 rounded-2xl border border-red-400/15 py-3 text-xs font-black text-red-400"><Flag size={15} /> Report</button><button onClick={() => void onLeave()} className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 py-3 text-xs font-black text-white"><LogOut size={15} /> Leave</button></div></SimpleModal>;
 }

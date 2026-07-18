@@ -7,17 +7,15 @@ import { AppShell } from "@/components/AppShell";
 import { Avatar } from "@/components/Avatar";
 import { BlockModal, ReportModal } from "@/components/Modals";
 import { PageHeader } from "@/components/PageHeader";
-import { SIM_USERS } from "@/lib/mock-data";
 import { useVybeStore } from "@/store/useVybeStore";
 
 export default function MatchesPage() {
-  const dataMode = useVybeStore((state) => state.dataMode);
   const people = useVybeStore((state) => state.people);
   const matches = useVybeStore((state) => state.matches);
   const unmatch = useVybeStore((state) => state.unmatch);
   const [reportId, setReportId] = useState<string | null>(null);
   const [blockId, setBlockId] = useState<string | null>(null);
-  const users = dataMode === "demo" ? SIM_USERS : people;
+  const users = people;
   const active = matches.filter((match) => match.status === "active").map((match) => ({ match, user: users.find((user) => user.id === match.userId) })).filter((item) => item.user);
   const reportUser = users.find((user) => user.id === reportId);
   const blockUser = users.find((user) => user.id === blockId);

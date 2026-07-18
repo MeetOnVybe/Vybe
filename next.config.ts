@@ -1,18 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "pbeoojpqjyndqcrzxbju.supabase.co",
-        pathname: "/storage/v1/object/**",
-      },
-    ],
-  },
-  experimental: {
-    cpus: 2,
-  },
+  poweredByHeader: false,
+  reactStrictMode: true,
+  // Limit page-data workers to keep builds reliable on developer laptops and
+  // constrained CI runners. This affects build concurrency, not runtime.
+  experimental: { cpus: 2 },
 };
 
 export default nextConfig;

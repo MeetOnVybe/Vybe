@@ -136,13 +136,10 @@ const themes: Array<{
 
 export default function SettingsPage() {
   const router = useRouter();
-  const dataMode = useVybeStore((state) => state.dataMode);
   const age = useVybeStore((state) => state.ageBracket);
   const settings = useVybeStore((state) => state.settings);
-  const setAge = useVybeStore((state) => state.setAgeBracket);
   const setSetting = useVybeStore((state) => state.setSetting);
   const logout = useVybeStore((state) => state.logout);
-  const reset = useVybeStore((state) => state.resetDemo);
   const blockedIds = useVybeStore((state) => state.blockedIds);
   const people = useVybeStore((state) => state.people);
   const unblockUser = useVybeStore((state) => state.unblockUser);
@@ -156,11 +153,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Control your experience"
         title="Settings"
-        description={
-          dataMode === "supabase"
-            ? "Theme, discovery, notification, sound, privacy, and safety preferences sync to your private Supabase account."
-            : "Theme, discovery, notification, sound, privacy, and safety preferences stay saved locally in demo mode."
-        }
+        description="Theme, discovery, notification, sound, privacy, and safety preferences sync to your private Supabase account."
       />
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="vybe-card rounded-[30px] p-5 sm:p-6">
@@ -247,7 +240,7 @@ export default function SettingsPage() {
             <ToggleRow
               icon={EyeOff}
               title="Blur sensitive previews"
-              body="Keep the interface ready for future moderation-based preview blurring."
+              body="Blur sensitive media previews flagged by VYBE moderation."
               checked={settings.blurSensitivePreviews}
               onChange={(value) => toggle("blurSensitivePreviews", value)}
             />
@@ -398,16 +391,13 @@ export default function SettingsPage() {
             bracket
           </h2>
           <p className="mt-2 text-xs leading-5 text-slate-500">
-            {dataMode === "supabase"
-              ? "Your bracket is calculated from date of birth in Postgres and cannot be changed from the browser."
-              : "Switching brackets changes only the simulated discovery and match pools."}
+            Your bracket is calculated from date of birth in Postgres and cannot be changed from the browser.
           </p>
           <div className="mt-5 grid grid-cols-2 gap-3">
             {(["13-15", "16-17"] as const).map((value) => (
               <button
-                disabled={dataMode === "supabase"}
+                disabled
                 key={value}
-                onClick={() => setAge(value)}
                 className={`vybe-button rounded-2xl border py-4 font-black ${age === value ? "border-blue-400/45 bg-blue-500/12 text-blue-500 shadow-[0_0_22px_rgba(37,99,235,.12)]" : "border-white/10 bg-white/[.025] text-slate-400"}`}
               >
                 {value}
@@ -420,9 +410,7 @@ export default function SettingsPage() {
               layer
             </p>
             <p className="mt-2 text-xs leading-5 text-slate-500">
-              {dataMode === "supabase"
-                ? "Supabase Auth, Postgres, private Storage, Realtime, RLS, discovery, matches, direct and group chat, stories, voice messages, moderation, presence, search, notifications, and secure one-on-one LiveKit video matching are active."
-                : "Supabase adapters remain ready behind the same interfaces; demo mode is explicit and local-only."}
+              Supabase Auth, Postgres, private Storage, Realtime, RLS, discovery, matches, direct and group chat, stories, voice messages, moderation, presence, search, notifications, and secure Solo and Group LiveKit video matching are active.
             </p>
           </div>
         </section>
@@ -482,17 +470,6 @@ export default function SettingsPage() {
           >
             <LogOut size={17} /> Log out
           </button>
-          {dataMode === "demo" && (
-            <button
-              onClick={() => {
-                reset();
-                router.push("/");
-              }}
-              className="vybe-button inline-flex items-center gap-2 rounded-2xl border border-red-400/15 bg-red-500/6 px-4 py-3 text-sm font-bold text-red-400 hover:bg-red-500/10"
-            >
-              <RotateCcw size={17} /> Reset all local demo data
-            </button>
-          )}
         </div>
       </section>
     </AppShell>

@@ -1,6 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { getDataMode, hasSupabaseEnv } from "@/lib/data-mode";
+import { hasSupabaseEnv } from "@/lib/data-mode";
 
 const PUBLIC_PATHS = new Set([
   "/",
@@ -17,11 +17,10 @@ function isPublicPath(pathname: string) {
 }
 
 export async function updateSession(request: NextRequest) {
-  if (getDataMode() === "demo") return NextResponse.next({ request });
-
   const pathname = request.nextUrl.pathname;
+  const isApiPath = pathname.startsWith("/api/");
   if (!hasSupabaseEnv()) {
-    if (isPublicPath(pathname)) return NextResponse.next({ request });
+    if (isPublicPath(pathname) || isApiPath) return NextResponse.next({ request });
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("error", "Supabase is not configured. Add the required Vercel or .env.local variables.");
@@ -46,6 +45,11 @@ export async function updateSession(request: NextRequest) {
 
   const { data, error } = await supabase.auth.getClaims();
   const isAuthenticated = Boolean(data?.claims?.sub) && !error;
+
+  // API handlers own their authentication response so clients always receive
+  // structured JSON (401/403) rather than an HTML login redirect. The proxy
+  // still refreshes cookies above when a browser session is present.
+  if (isApiPath) return response;
 
   if (!isAuthenticated && !isPublicPath(pathname)) {
     const url = request.nextUrl.clone();

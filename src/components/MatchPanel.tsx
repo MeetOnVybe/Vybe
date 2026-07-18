@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Ban, Flag, Sparkles, UserCheck, UserPlus } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
-import { SimUser } from "@/types";
+import { PublicProfile } from "@/types";
 
 export function matchPercent(userInterests: string[], otherInterests: string[]) {
   const shared = otherInterests.filter((item) => userInterests.includes(item)).length;
@@ -23,7 +23,7 @@ export function MatchPanel({
   onBlock,
   friendStatus,
 }: {
-  user: SimUser;
+  user: PublicProfile;
   self?: boolean;
   cameraOff?: boolean;
   interests?: string[];
@@ -47,7 +47,7 @@ export function MatchPanel({
       className={`group relative overflow-hidden rounded-[28px] border border-white/10 bg-[#08101b] shadow-[0_24px_80px_rgba(0,0,0,.42)] ${compact ? "min-h-[310px]" : "min-h-[55vh] sm:min-h-[66vh]"}`}
     >
       <div className="absolute inset-0">
-        <Image src={user.avatar.image} alt={`${user.displayName} demo profile`} fill sizes={compact ? "(max-width: 640px) 100vw, 33vw" : "(max-width: 768px) 100vw, 50vw"} className={`object-cover transition duration-700 group-hover:scale-[1.025] ${cameraOff ? "opacity-10 blur-xl" : "opacity-95"}`} priority={!compact} />
+        <Image src={user.avatar.image} alt={`${user.displayName} profile`} fill sizes={compact ? "(max-width: 640px) 100vw, 33vw" : "(max-width: 768px) 100vw, 50vw"} className={`object-cover transition duration-700 group-hover:scale-[1.025] ${cameraOff ? "opacity-10 blur-xl" : "opacity-95"}`} priority={!compact} />
       </div>
       <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(2,5,12,.98)_0%,rgba(3,8,17,.68)_36%,rgba(2,6,15,.08)_66%,rgba(1,4,10,.5)_100%)]" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_18%,rgba(74,177,255,.17),transparent_24%)]" />

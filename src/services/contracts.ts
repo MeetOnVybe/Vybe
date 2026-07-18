@@ -1,15 +1,16 @@
 import {
-  AgeBracket,
   AdminUserSummary,
   CloudSnapshot,
   CurrentProfile,
   DiscoveryFilters,
   GroupConversation,
+  GroupVideoSessionSummary,
+  GroupVideoTokenResponse,
   Message,
   ModerationAppeal,
   ModerationCase,
   ModerationLog,
-  SimUser,
+  PublicProfile,
   StoryItem,
   SwipeDecisionResult,
   UserSettings,
@@ -20,32 +21,10 @@ import {
   VideoTokenResponse,
 } from "@/types";
 
-export interface MatchmakingService {
-  findSolo(
-    ageBracket: AgeBracket,
-    blockedIds: string[],
-    previousId: string | null,
-  ): SimUser | null;
-  findGroup(
-    ageBracket: AgeBracket,
-    blockedIds: string[],
-    previousIds: string[],
-  ): SimUser[];
-}
 
-export interface DemoChatService {
-  createOutgoing(text: string): Message;
-  createSimulatedReply(userId: string): Message;
-}
-
-export type ChatService = DemoChatService;
-
-export interface ProfileService {
-  normalize(profile: CurrentProfile): CurrentProfile;
-}
 
 export interface VideoService {
-  provider: "mock" | "livekit" | "webrtc";
+  provider: "livekit";
   loadPreferences(): Promise<VideoMatchPreferences>;
   savePreferences(preferences: VideoMatchPreferences): Promise<void>;
   joinQueue(preferences: VideoMatchPreferences): Promise<VideoQueueResult>;
@@ -84,6 +63,39 @@ export interface VideoService {
   ): Promise<() => void>;
 }
 
+export interface GroupVideoService {
+  provider: "livekit";
+  loadPreferences(): Promise<VideoMatchPreferences>;
+  savePreferences(preferences: VideoMatchPreferences): Promise<void>;
+  joinQueue(preferences: VideoMatchPreferences): Promise<VideoQueueResult>;
+  getQueueStatus(): Promise<VideoQueueResult>;
+  heartbeatQueue(): Promise<void>;
+  leaveQueue(): Promise<void>;
+  loadSession(sessionId: string): Promise<GroupVideoSessionSummary>;
+  getConnectionToken(sessionId: string): Promise<GroupVideoTokenResponse>;
+  updateParticipantState(
+    sessionId: string,
+    state: {
+      connected: boolean;
+      quality: "unknown" | "excellent" | "good" | "poor" | "lost";
+      cameraEnabled: boolean;
+      microphoneEnabled: boolean;
+    },
+  ): Promise<void>;
+  leaveSession(
+    sessionId: string,
+    reason: "leave" | "skip" | "disconnect" | "block" | "report",
+  ): Promise<void>;
+  logEvent(sessionId: string, eventType: string, metadata?: Record<string, unknown>): Promise<void>;
+  moderateFrame(
+    sessionId: string,
+    subjectUserId: string,
+    frameDataUrl: string,
+  ): Promise<{ hidden: boolean; flagged: boolean }>;
+  subscribeQueue(onChange: () => void): Promise<() => void>;
+  subscribeSession(sessionId: string, onChange: () => void): Promise<() => void>;
+}
+
 export interface AuthService {
   signUp(input: {
     email: string;
@@ -120,12 +132,12 @@ export interface CreateStoryInput {
 
 export interface SocialPlatformService {
   loadSnapshot(): Promise<CloudSnapshot>;
-  loadDiscovery(filters: DiscoveryFilters): Promise<SimUser[]>;
+  loadDiscovery(filters: DiscoveryFilters): Promise<PublicProfile[]>;
   searchProfiles(
     query: string,
     offset?: number,
     limit?: number,
-  ): Promise<SimUser[]>;
+  ): Promise<PublicProfile[]>;
   submitSwipe(
     userId: string,
     decision: "like" | "pass",
@@ -151,7 +163,7 @@ export interface SocialPlatformService {
     userId: string,
     reason: string,
     notes: string,
-    targetType?: "profile" | "message" | "story" | "group" | "video_session",
+    targetType?: "profile" | "message" | "story" | "group" | "video_session" | "group_video_session",
     targetId?: string,
   ): Promise<void>;
   sendMessage(input: SendMessageInput): Promise<void>;

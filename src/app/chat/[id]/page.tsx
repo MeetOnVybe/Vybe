@@ -10,7 +10,6 @@ import { Avatar } from "@/components/Avatar";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { VoiceDraft, VoiceRecorder } from "@/components/chat/VoiceRecorder";
 import { BlockModal, ReportModal } from "@/components/Modals";
-import { SIM_USERS } from "@/lib/mock-data";
 import { getSupabasePlatformService } from "@/services";
 import { useVybeStore } from "@/store/useVybeStore";
 import type { Message } from "@/types";
@@ -30,11 +29,10 @@ export default function PrivateChatPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params.id;
-  const dataMode = useVybeStore((state) => state.dataMode);
   const people = useVybeStore((state) => state.people);
   const conversationId = useVybeStore((state) => state.conversationIdsByUser[id]);
   const currentUserId = useVybeStore((state) => state.currentUserId);
-  const user = (dataMode === "demo" ? SIM_USERS : people).find((item) => item.id === id);
+  const user = people.find((item) => item.id === id);
   const status = useVybeStore((state) => state.friendStatuses[id]);
   const matchStatus = useVybeStore((state) => state.matchStatuses[id]);
   const messages = useVybeStore((state) => state.messages[id] ?? EMPTY_MESSAGES);
@@ -66,23 +64,23 @@ export default function PrivateChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const typingTimer = useRef<number | null>(null);
   const typingChannel = useRef<{ send: (typing: boolean) => Promise<void>; unsubscribe: () => Promise<void> } | null>(null);
-  const threadConversationId = conversationId || `demo-direct-${id}`;
+  const threadConversationId = conversationId || "";
   const isMuted = mutedIds.includes(threadConversationId);
 
-  const connections = useMemo(() => (dataMode === "demo" ? SIM_USERS : people).filter((person) => person.id !== id && (friends[person.id] === "friends" || matchesByUser[person.id] === "active")), [dataMode, friends, id, matchesByUser, people]);
+  const connections = useMemo(() => people.filter((person) => person.id !== id && (friends[person.id] === "friends" || matchesByUser[person.id] === "active")), [friends, id, matchesByUser, people]);
   const firstUnread = messages.findIndex((message) => !message.read && message.senderId === id);
 
   useEffect(() => { if (user && (status === "friends" || matchStatus === "active")) void markRead(id); }, [id, markRead, matchStatus, messages.length, status, user]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: settings.animationsEnabled ? "smooth" : "auto" }); }, [messages.length, settings.animationsEnabled, typing]);
   useEffect(() => {
-    if (dataMode !== "supabase" || !conversationId || !user) return;
+    if (!conversationId || !user) return;
     let active = true;
     void getSupabasePlatformService().subscribeTyping(conversationId, (_userId, isTyping) => setTyping(id, isTyping)).then((channel) => {
       if (!active) { void channel.unsubscribe(); return; }
       typingChannel.current = channel;
     });
     return () => { active = false; if (typingTimer.current) window.clearTimeout(typingTimer.current); if (typingChannel.current) void typingChannel.current.unsubscribe(); typingChannel.current = null; setTyping(id, false); };
-  }, [conversationId, dataMode, id, setTyping, user]);
+  }, [conversationId, id, setTyping, user]);
 
   if (!user) return <AppShell><div className="vybe-card rounded-[28px] p-8 text-center">User not found or no longer available.</div></AppShell>;
   if (status !== "friends" && matchStatus !== "active") return <AppShell><div className="vybe-card grid min-h-[60vh] place-items-center rounded-[30px] p-8 text-center"><div><ShieldAlert className="mx-auto text-blue-400" size={32} /><h1 className="mt-5 text-2xl font-black">Chat locked</h1><p className="mt-2 text-sm text-slate-500">Private chat requires an accepted friendship or active mutual match, with neither account blocked.</p><Link href="/friends" className="vybe-button mt-6 inline-flex rounded-2xl bg-blue-600 px-5 py-3 font-black text-white">Open Connections</Link></div></div></AppShell>;

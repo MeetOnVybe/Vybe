@@ -242,14 +242,9 @@ function PreferenceButton({
   );
 }
 
-export function LiveVideoMatch({
-  demoFallback,
-}: {
-  demoFallback?: React.ReactNode;
-}) {
+export function LiveVideoMatch() {
   const searchParams = useSearchParams();
   const service = useMemo(() => getVideoService(), []);
-  const dataMode = useVybeStore((state) => state.dataMode);
   const profile = useVybeStore((state) => state.profile);
   const updateProfile = useVybeStore((state) => state.updateProfile);
   const sendFriendRequest = useVybeStore((state) => state.sendFriendRequest);
@@ -281,7 +276,6 @@ export function LiveVideoMatch({
   const [reportOpen, setReportOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [legacyDemo, setLegacyDemo] = useState(false);
   const [starting, setStarting] = useState(false);
   const [permissionState, setPermissionState] = useState<
     "idle" | "granted" | "denied"
@@ -451,16 +445,6 @@ export function LiveVideoMatch({
       setSession(loaded);
       setRemoteBlurred(true);
       setCallSeconds(0);
-
-      if (service.provider === "mock") {
-        await ensureLocalTracks(preferences);
-        window.setTimeout(() => {
-          setRemoteReady(true);
-          setRemoteBlurred(false);
-          setPhase("active");
-        }, 750);
-        return;
-      }
 
       const [tokenData, tracks] = await Promise.all([
         service.getConnectionToken(sessionId),
@@ -837,7 +821,7 @@ export function LiveVideoMatch({
 
   useEffect(() => {
     const requestedSession = searchParams.get("session");
-    if (!requestedSession || service.provider === "mock") return;
+    if (!requestedSession) return;
     queueMicrotask(() => {
       void connectSession(requestedSession).catch((reason) => {
         setError(
@@ -848,7 +832,7 @@ export function LiveVideoMatch({
         setPhase("error");
       });
     });
-  }, [connectSession, searchParams, service.provider]);
+  }, [connectSession, searchParams]);
 
   useEffect(() => {
     const track = localTracksRef.current.find(
@@ -864,7 +848,7 @@ export function LiveVideoMatch({
   }, [phase, session?.id]);
 
   useEffect(() => {
-    if (dataMode !== "supabase" || !session?.id) return;
+    if (!session?.id) return;
     const sessionId = session.id;
     const handlePageHide = () => {
       void fetch("/api/video/end", {
@@ -877,10 +861,10 @@ export function LiveVideoMatch({
     };
     window.addEventListener("pagehide", handlePageHide);
     return () => window.removeEventListener("pagehide", handlePageHide);
-  }, [dataMode, session?.id]);
+  }, [session?.id]);
 
   useEffect(() => {
-    if (phase !== "matching" || service.provider === "mock") return;
+    if (phase !== "matching") return;
 
     let disposed = false;
     let unsubscribe: (() => void) | undefined;
@@ -953,7 +937,7 @@ export function LiveVideoMatch({
 
   useEffect(() => {
     const sessionId = session?.id;
-    if (!sessionId || service.provider === "mock") return;
+    if (!sessionId) return;
     let dispose: (() => void) | undefined;
     void service
       .subscribeSession(sessionId, async () => {
@@ -1025,7 +1009,6 @@ export function LiveVideoMatch({
     [disconnectRoom, stopLocalTracks],
   );
 
-  if (legacyDemo && demoFallback) return <>{demoFallback}</>;
 
   const setupIncomplete = videoGender === "unspecified";
 
@@ -1049,15 +1032,6 @@ export function LiveVideoMatch({
             <span className="hidden rounded-full border border-blue-400/20 bg-blue-500/8 px-3 py-1.5 text-[10px] font-black text-blue-400 sm:inline-flex">
               <ShieldCheck size={13} className="mr-1.5" /> AGE-PROTECTED 1:1
             </span>
-            {dataMode === "demo" && demoFallback && (
-              <button
-                type="button"
-                onClick={() => setLegacyDemo(true)}
-                className="vybe-button rounded-xl border border-[var(--border)] px-3 py-2 text-[10px] font-bold text-[var(--muted)]"
-              >
-                Legacy demo
-              </button>
-            )}
           </div>
         </header>
 
@@ -1440,17 +1414,7 @@ export function LiveVideoMatch({
                   </div>
 
                   <div className="relative min-h-[38vh] overflow-hidden rounded-[28px] border border-blue-400/20 bg-[#05080e] shadow-[0_0_55px_rgba(22,134,255,.15)] md:min-h-0">
-                    {service.provider === "mock" ? (
-                      <div
-                        className={`absolute inset-0 bg-cover bg-center transition duration-700 ${remoteBlurred ? "scale-105 blur-2xl" : "scale-100 blur-0"}`}
-                        style={{
-                          backgroundImage: `url(${peer?.bannerUrl || peer?.avatarUrl || "/banners/blue-velocity.svg"})`,
-                        }}
-                      >
-                        <div className="absolute inset-0 bg-black/30" />
-                      </div>
-                    ) : (
-                      <video
+                    <video
                         ref={remoteVideoRef}
                         autoPlay
                         playsInline
@@ -1458,7 +1422,6 @@ export function LiveVideoMatch({
                         controlsList="nodownload noremoteplayback"
                         className={`h-full w-full object-cover transition duration-700 ${remoteBlurred ? "scale-105 blur-2xl" : "scale-100 blur-0"}`}
                       />
-                    )}
                     <audio ref={remoteAudioRef} autoPlay controls={false} />
                     {!remoteReady && (
                       <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_50%_35%,rgba(100,169,250,.2),transparent_48%),#060a11]">

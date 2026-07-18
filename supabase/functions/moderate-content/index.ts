@@ -1,14 +1,31 @@
 // VYBE Phase 5 trusted content and ephemeral live-video moderation gateway.
-// Deploy with: supabase functions deploy moderate-content --no-verify-jwt=false
-// Secrets: SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY and optional OPENAI_API_KEY.
+// Deploy with: supabase functions deploy moderate-content --no-verify-jwt
+// Secrets: SUPABASE_URL, SUPABASE_ANON_KEY (or SUPABASE_PUBLISHABLE_KEY), SUPABASE_SERVICE_ROLE_KEY and optional OPENAI_API_KEY.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-};
+const defaultAllowedOrigins = [
+  "https://vybe-taupe-zeta.vercel.app",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+];
+
+function corsHeadersFor(request: Request) {
+  const origin = request.headers.get("Origin");
+  const configured = (Deno.env.get("VYBE_ALLOWED_ORIGINS") || "")
+    .split(",")
+    .map((value) => value.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  const allowed = new Set([...defaultAllowedOrigins, ...configured]);
+  if (origin && !allowed.has(origin.replace(/\/$/, ""))) return null;
+  return {
+    "Access-Control-Allow-Origin": origin || "https://vybe-taupe-zeta.vercel.app",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+    Vary: "Origin",
+  };
+}
 
 type Severity = "low" | "medium" | "high" | "critical";
 type ModerationResult = {
@@ -210,18 +227,44 @@ async function enforceRateLimit(
     .gt("created_at", since);
   if ((count || 0) >= limit)
     throw new Error("Please slow down and try again shortly");
-  await service.from("user_action_events").insert({ user_id: userId, action });
+  const { error } = await service
+    .from("user_action_events")
+    .insert({ user_id: userId, action });
+  if (error) throw error;
 }
 
+function responseStatus(message: string) {
+  if (/authentication|required/i.test(message)) return 401;
+  if (/access|required|denied|not allowed|ownership/i.test(message)) return 403;
+  if (/slow down|rate/i.test(message)) return 429;
+  if (/not configured|missing server/i.test(message)) return 503;
+  return 400;
+}
+
+
 Deno.serve(async (request) => {
-  if (request.method === "OPTIONS")
-    return new Response("ok", { headers: corsHeaders });
+  const corsHeaders = corsHeadersFor(request);
+  if (!corsHeaders)
+    return new Response(JSON.stringify({ error: "Origin not allowed" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  const respond = (payload: Record<string, unknown>, status = 200) =>
+    new Response(JSON.stringify(payload), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    if (request.method !== "POST") return respond({ error: "Method not allowed" }, 405);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !anonKey || !serviceKey) {
+      throw new Error("Moderation service is not configured");
+    }
     const authorization = request.headers.get("Authorization") || "";
-    if (!authorization) throw new Error("Authentication required");
+    if (!authorization.toLowerCase().startsWith("bearer ")) throw new Error("Authentication required");
 
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authorization } },
@@ -255,9 +298,12 @@ Deno.serve(async (request) => {
         ? body.messageType
         : "text";
       const text = String(body.text || "").trim();
+      if (text.length > 4000) throw new Error("Message is too long");
       const mediaPath = body.mediaPath ? String(body.mediaPath) : null;
       if (mediaPath && !mediaPath.startsWith(`${user.id}/`))
         throw new Error("Invalid media ownership");
+      if (messageType === "text" && !text) throw new Error("Message cannot be empty");
+      if (messageType !== "text" && !mediaPath) throw new Error("Message media is required");
       let imageUrl: string | null = null;
       if (messageType === "image" && mediaPath)
         imageUrl =
@@ -326,10 +372,7 @@ Deno.serve(async (request) => {
             entity_id: inserted.id,
           });
       }
-      return new Response(
-        JSON.stringify({ ok: true, hidden: moderation.hidden }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return respond({ ok: true, hidden: moderation.hidden, messageId: inserted.id });
     }
 
     if (body.action === "create_story") {
@@ -338,9 +381,17 @@ Deno.serve(async (request) => {
         ? body.mediaType
         : "text";
       const text = String(body.text || "").trim();
+      if (text.length > 1000) throw new Error("Story text is too long");
       const mediaPath = body.mediaPath ? String(body.mediaPath) : null;
       if (mediaPath && !mediaPath.startsWith(`${user.id}/`))
         throw new Error("Invalid story media ownership");
+      if (mediaType === "text" && !text) throw new Error("Story text is required");
+      if (mediaType !== "text" && !mediaPath) throw new Error("Story media is required");
+      const { data: accountAllowed, error: accountError } = await userClient.rpc(
+        "account_can_participate",
+        { target_user: user.id },
+      );
+      if (accountError || !accountAllowed) throw new Error("Account is restricted");
       let imageUrl: string | null = null;
       if (mediaType === "photo" && mediaPath)
         imageUrl =
@@ -392,10 +443,7 @@ Deno.serve(async (request) => {
             raw_scores: moderation.scores,
           });
       }
-      return new Response(
-        JSON.stringify({ ok: true, hidden: moderation.hidden }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return respond({ ok: true, hidden: moderation.hidden, storyId: inserted.id });
     }
 
     if (body.action === "moderate_video_frame") {
@@ -510,29 +558,148 @@ Deno.serve(async (request) => {
         });
       }
       // The JPEG data URL is intentionally never inserted into Storage or Postgres.
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          flagged: moderation.categories.length > 0,
-          hidden:
-            moderation.hidden ||
-            moderation.severity === "high" ||
-            moderation.severity === "critical",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      return respond({
+        ok: true,
+        flagged: moderation.categories.length > 0,
+        hidden:
+          moderation.hidden ||
+          moderation.severity === "high" ||
+          moderation.severity === "critical",
+      });
+    }
+
+    if (body.action === "moderate_group_video_frame") {
+      await enforceRateLimit(
+        service,
+        user.id,
+        "group_video_moderation_sample",
+        320,
+        3600,
       );
+      const sessionId = String(body.sessionId || "");
+      const subjectUserId = String(body.subjectUserId || "");
+      const frameDataUrl = String(body.frameDataUrl || "");
+      if (!sessionId || !subjectUserId)
+        throw new Error("Group video session and participant are required");
+      if (subjectUserId === user.id)
+        throw new Error("A participant cannot submit their own moderation frame");
+      if (
+        !frameDataUrl.startsWith("data:image/jpeg;base64,") ||
+        frameDataUrl.length > 900_000
+      ) {
+        throw new Error("Invalid moderation frame");
+      }
+      const { data: sessionState, error: accessError } = await userClient.rpc(
+        "get_group_video_session_state",
+        { target_session: sessionId },
+      );
+      if (accessError || !sessionState)
+        throw new Error("Group video session access required");
+      const participants = Array.isArray(sessionState.participants)
+        ? sessionState.participants
+        : [];
+      if (!participants.some((participant: { id?: string }) => participant.id === subjectUserId))
+        throw new Error("The reported participant is not in this group video session");
+      const { data: sessionRow, error: sessionError } = await service
+        .from("group_video_sessions")
+        .select("id,status")
+        .eq("id", sessionId)
+        .single();
+      if (
+        sessionError ||
+        !sessionRow ||
+        !["forming", "connecting", "active", "reconnecting", "flagged"].includes(
+          sessionRow.status,
+        )
+      ) {
+        throw new Error("Group video session is not active");
+      }
+      const model = await openAiModeration("", frameDataUrl);
+      const moderation = model || {
+        categories: [],
+        severity: "low" as Severity,
+        hidden: false,
+        provider: "video-moderation-not-configured",
+        scores: {},
+        summary: "Visual moderation provider is not configured",
+      };
+      if (moderation.categories.length) {
+        const severe =
+          moderation.severity === "high" ||
+          moderation.severity === "critical" ||
+          moderation.hidden;
+        const { data: eventRow, error: eventError } = await service
+          .from("group_video_moderation_events")
+          .insert({
+            session_id: sessionId,
+            subject_user_id: subjectUserId,
+            submitted_by: user.id,
+            categories: moderation.categories,
+            severity: moderation.severity,
+            provider: moderation.provider,
+            summary: moderation.summary,
+            hidden: severe,
+          })
+          .select("id")
+          .single();
+        if (eventError) throw eventError;
+        await service.from("moderation_flags").insert({
+          source_type: "group_video_session",
+          source_id: sessionId,
+          subject_user_id: subjectUserId,
+          reporter_id: null,
+          categories: moderation.categories,
+          severity: moderation.severity,
+          hidden: severe,
+          summary: moderation.summary,
+          provider: moderation.provider,
+          raw_scores: moderation.scores,
+        });
+        await service
+          .from("group_video_sessions")
+          .update({
+            status: severe ? "flagged" : sessionRow.status,
+            moderation_state: severe ? "severe" : "flagged",
+            hidden_until_review: severe,
+            last_activity_at: new Date().toISOString(),
+          })
+          .eq("id", sessionId)
+          .neq("status", "ended");
+        if (moderation.severity === "critical") {
+          await service.from("video_restrictions").upsert(
+            {
+              user_id: subjectUserId,
+              status: "review_required",
+              reason: "A severe group-video safety signal requires moderator review.",
+              strike_count: 1,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id" },
+          );
+        }
+        await service.from("notifications").insert({
+          user_id: user.id,
+          type: "safety",
+          title: "Group video hidden for safety review",
+          body: "A severe safety signal was detected. That participant's video was hidden and queued for human review.",
+          entity_id: eventRow.id,
+        });
+      }
+      // The JPEG data URL is intentionally never inserted into Storage or Postgres.
+      return respond({
+        ok: true,
+        flagged: moderation.categories.length > 0,
+        hidden:
+          moderation.hidden ||
+          moderation.severity === "high" ||
+          moderation.severity === "critical",
+      });
     }
 
     throw new Error("Unsupported moderation action");
   } catch (error) {
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Request failed",
-      }),
-      {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    const message = error instanceof Error ? error.message : "Request failed";
+    console.error("[VYBE moderation] request failed", { message });
+    return respond({ error: message }, responseStatus(message));
   }
 });

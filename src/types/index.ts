@@ -59,7 +59,7 @@ export interface AvatarAsset {
   gradient: string;
 }
 
-export interface SimUser {
+export interface PublicProfile {
   id: string;
   username: string;
   displayName: string;
@@ -162,6 +162,31 @@ export interface VideoTokenResponse {
   session: VideoSessionSummary;
 }
 
+export interface GroupVideoParticipant extends VideoPeerProfile {
+  connected: boolean;
+  cameraEnabled: boolean;
+  microphoneEnabled: boolean;
+  connectionQuality: VideoConnectionQuality;
+}
+
+export interface GroupVideoSessionSummary {
+  id: string;
+  roomName: string;
+  status: VideoSessionStatus | "forming";
+  maxParticipants: number;
+  participants: GroupVideoParticipant[];
+  createdAt: string;
+  connectedAt?: string | null;
+  endedAt?: string | null;
+  hiddenUntilReview?: boolean;
+}
+
+export interface GroupVideoTokenResponse {
+  serverUrl: string;
+  participantToken: string;
+  session: GroupVideoSessionSummary;
+}
+
 export interface Message {
   id: string;
   senderId: string;
@@ -245,7 +270,7 @@ export interface ReportRecord {
   reason: string;
   notes: string;
   createdAt: string;
-  targetType?: "profile" | "message" | "story" | "group" | "video_session";
+  targetType?: "profile" | "message" | "story" | "group" | "video_session" | "group_video_session";
   targetId?: string;
 }
 
@@ -390,7 +415,7 @@ export interface CloudSnapshot {
   currentUserId: string;
   profile: CloudProfileRow;
   currentProfile: CurrentProfile;
-  people: SimUser[];
+  people: PublicProfile[];
   friendStatuses: Record<string, "pending" | "friends" | "blocked">;
   matchStatuses: Record<string, MatchStatus>;
   matches: VybeMatch[];
@@ -407,12 +432,3 @@ export interface CloudSnapshot {
   isAdmin?: boolean;
 }
 
-export interface AgeAssuranceAdapter {
-  provider: "placeholder";
-  begin(userId: string): Promise<{ status: "not_configured" }>;
-}
-
-export interface ParentalConsentAdapter {
-  provider: "placeholder";
-  begin(userId: string): Promise<{ status: "not_configured" }>;
-}

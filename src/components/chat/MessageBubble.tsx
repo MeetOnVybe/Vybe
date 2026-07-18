@@ -7,14 +7,14 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Avatar } from "@/components/Avatar";
 import { ClientTimestamp } from "@/components/ClientTimestamp";
 import { VoiceMessagePlayer } from "@/components/chat/VoiceMessagePlayer";
-import type { Message, SimUser } from "@/types";
+import type { Message, PublicProfile } from "@/types";
 
 const REACTIONS = ["💙", "😂", "🔥", "👍", "😮"];
 
 export function MessageBubble({ message, mine, sender, showAvatar = true, readReceipts = true, onReact, onReply, onForward, onDeleteMe, onDeleteEveryone, onPin, onReport }: {
   message: Message;
   mine: boolean;
-  sender?: SimUser;
+  sender?: PublicProfile;
   showAvatar?: boolean;
   readReceipts?: boolean;
   onReact: (emoji: string) => void;

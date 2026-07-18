@@ -1,10 +1,8 @@
-# VYBE Video Safety Agent
+# VYBE Video Safety Worker
 
-This optional server-side LiveKit worker transcribes authorized room participants
-in memory and forwards final transcript segments to VYBE's protected moderation
-gateway. It does **not** record calls, save audio, or persist raw transcripts.
+This private LiveKit worker listens only in rooms authorized and dispatched by VYBE. It transcribes final speech segments in memory and sends them to the protected VYBE moderation gateway. It does not record calls, save audio, or persist raw transcripts.
 
-## Run locally
+## Local development
 
 ```bash
 python -m venv .venv
@@ -14,10 +12,24 @@ cp .env.example .env
 python agent.py dev
 ```
 
-Deploy it as a private worker process with the same LiveKit project credentials
-as VYBE. Set the same `VIDEO_SAFETY_AGENT_NAME` in VYBE and the worker, and set
-`VIDEO_MODERATION_AGENT_SECRET` to the same long random server-only value.
+On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`.
 
-The token endpoint dispatches this named worker only after Supabase confirms both
-participants belong to the exact age-safe VYBE video session. The secret is never
-placed in a room token or browser bundle.
+## LiveKit Cloud deployment
+
+Create an uncommitted `.env.production` from `.env.example`, then:
+
+```bash
+lk cloud auth
+lk project set-default "YOUR LIVEKIT PROJECT NAME"
+lk agent create --secrets-file .env.production .
+```
+
+Subsequent deployments:
+
+```bash
+lk agent deploy --secrets-file .env.production .
+lk agent status
+lk agent logs --log-type deploy
+```
+
+The worker’s `VIDEO_SAFETY_AGENT_NAME` and `VIDEO_MODERATION_AGENT_SECRET` must match the Vercel values. Never put the secret in a browser variable, room metadata, or repository file.

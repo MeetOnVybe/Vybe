@@ -1,17 +1,10 @@
 "use client";
 
 import { Suspense } from "react";
-import { DemoSoloMatch } from "@/components/video/DemoSoloMatch";
 import { LiveVideoMatch } from "@/components/video/LiveVideoMatch";
-import { useVybeStore } from "@/store/useVybeStore";
 
 function SoloMatchContent() {
-  const dataMode = useVybeStore((state) => state.dataMode);
-  return dataMode === "supabase" ? (
-    <LiveVideoMatch />
-  ) : (
-    <LiveVideoMatch demoFallback={<DemoSoloMatch />} />
-  );
+  return <LiveVideoMatch />;
 }
 
 function SoloMatchFallback() {

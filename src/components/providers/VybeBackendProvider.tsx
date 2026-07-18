@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { getDataMode, hasSupabaseEnv } from "@/lib/data-mode";
+import { hasSupabaseEnv } from "@/lib/data-mode";
 import { createClient } from "@/lib/supabase/client";
 import { getSupabasePlatformService } from "@/services";
 import { useVybeStore } from "@/store/useVybeStore";
@@ -17,7 +17,7 @@ export function VybeBackendProvider({ children }: { children: React.ReactNode })
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
-    if (getDataMode() !== "supabase" || !hasSupabaseEnv()) return;
+    if (!hasSupabaseEnv()) return;
     const client = createClient();
     const scheduleHydrate = () => {
       if (timer.current) window.clearTimeout(timer.current);
@@ -39,7 +39,7 @@ export function VybeBackendProvider({ children }: { children: React.ReactNode })
   }, [hydrateCloud]);
 
   useEffect(() => {
-    if (getDataMode() !== "supabase" || !hasSupabaseEnv() || !cloudReady) return;
+    if (!hasSupabaseEnv() || !cloudReady) return;
     let unsubscribe: (() => void) | undefined;
     const service = getSupabasePlatformService();
     const scheduleHydrate = () => {
@@ -51,7 +51,7 @@ export function VybeBackendProvider({ children }: { children: React.ReactNode })
   }, [cloudReady, hydrateCloud]);
 
   useEffect(() => {
-    if (getDataMode() !== "supabase" || !hasSupabaseEnv() || !cloudReady) return;
+    if (!hasSupabaseEnv() || !cloudReady) return;
     const service = getSupabasePlatformService();
     const update = (online: boolean) => void service.setPresence(settings.showOnlineStatus && settings.presenceVisibility !== "hidden" && online).catch(() => undefined);
     update(document.visibilityState === "visible");
@@ -69,7 +69,7 @@ export function VybeBackendProvider({ children }: { children: React.ReactNode })
   }, [cloudReady, settings.presenceVisibility, settings.showOnlineStatus]);
 
   useEffect(() => {
-    if (getDataMode() !== "supabase" || PUBLIC_ROUTES.has(pathname)) return;
+    if (PUBLIC_ROUTES.has(pathname)) return;
     // Route protection is enforced server-side by proxy.ts; this keeps client data fresh after navigation.
     if (cloudReady) void hydrateCloud();
   }, [pathname, cloudReady, hydrateCloud]);

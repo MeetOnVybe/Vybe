@@ -4,9 +4,9 @@ import Link from "next/link";
 import { motion, type PanInfo } from "framer-motion";
 import { Eye, Heart, RotateCcw, UsersRound, X } from "lucide-react";
 import { Avatar } from "@/components/Avatar";
-import type { SimUser } from "@/types";
+import type { PublicProfile } from "@/types";
 
-export function DiscoveryCard({ user, onDecision, onUndo, canUndo = false }: { user: SimUser; onDecision: (decision: "like" | "pass") => void; onUndo: () => void; canUndo?: boolean }) {
+export function DiscoveryCard({ user, onDecision, onUndo, canUndo = false }: { user: PublicProfile; onDecision: (decision: "like" | "pass") => void; onUndo: () => void; canUndo?: boolean }) {
   const decideFromDrag = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (info.offset.x > 110 || info.velocity.x > 650) onDecision("like");
     if (info.offset.x < -110 || info.velocity.x < -650) onDecision("pass");

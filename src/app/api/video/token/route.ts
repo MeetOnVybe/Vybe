@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasSupabaseEnv } from "@/lib/data-mode";
 import { RoomAgentDispatch, RoomConfiguration } from "@livekit/protocol";
 import { createClient as createSupabaseClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import { AccessToken } from "livekit-server-sdk";
@@ -45,6 +46,8 @@ async function getAuthenticatedSupabase(request: NextRequest): Promise<Authentic
 }
 
 export async function GET(request: NextRequest) {
+  if (!hasSupabaseEnv())
+    return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
   try {
     const sessionId = request.nextUrl.searchParams.get("sessionId");
     if (!sessionId) {
@@ -148,10 +151,7 @@ export async function GET(request: NextRequest) {
         agents: [
           new RoomAgentDispatch({
             agentName,
-            metadata: JSON.stringify({
-              sessionId,
-              participantIds: [user.id, peerId],
-            }),
+            metadata: JSON.stringify({ sessionId, group: false }),
           }),
         ],
       });

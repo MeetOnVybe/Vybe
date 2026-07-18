@@ -30,20 +30,12 @@ function applyTheme(preference: ThemePreference) {
 
 export function ThemeSync({ children }: { children: React.ReactNode }) {
   const preference = useVybeStore((state) => state.settings.themePreference);
-  const dataMode = useVybeStore((state) => state.dataMode);
   const cloudReady = useVybeStore((state) => state.cloudReady);
   const setSetting = useVybeStore((state) => state.setSetting);
 
   useEffect(() => {
     const local = savedTheme();
-    if (dataMode === "demo" && preference === "system" && local !== "system") {
-      setSetting("themePreference", local);
-      return;
-    }
-    const activePreference =
-      dataMode === "supabase" && !cloudReady && local !== "system"
-        ? local
-        : preference;
+    const activePreference = !cloudReady && local !== "system" ? local : preference;
     applyTheme(activePreference);
     const media = window.matchMedia("(prefers-color-scheme: light)");
     const onChange = () => {
@@ -51,7 +43,7 @@ export function ThemeSync({ children }: { children: React.ReactNode }) {
     };
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
-  }, [cloudReady, dataMode, preference, setSetting]);
+  }, [cloudReady, preference, setSetting]);
 
   return children;
 }

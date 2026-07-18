@@ -1,0 +1,7 @@
+project_id = "vybe"
+
+[functions.moderate-content]
+# The function verifies the caller's Supabase Auth access token itself with
+# auth.getUser(). Disabling the legacy gateway verifier is required when using
+# modern publishable keys and avoids production-only 401 responses.
+verify_jwt = false

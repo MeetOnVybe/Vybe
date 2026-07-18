@@ -210,6 +210,16 @@ function mergeModeration(
 export async function POST(request: NextRequest) {
   try {
     const expectedSecret = process.env.VIDEO_MODERATION_AGENT_SECRET;
+    if (
+      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      !expectedSecret
+    ) {
+      return NextResponse.json(
+        { error: "Speech moderation is not configured" },
+        { status: 503 },
+      );
+    }
     const authorization = request.headers.get("authorization") || "";
     const receivedSecret = authorization.startsWith("Bearer ")
       ? authorization.slice(7)
@@ -232,47 +242,93 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminClient();
-    let sessionQuery = admin
-      .from("video_sessions")
-      .select("id,room_name,status,user_a,user_b")
-      .eq("room_name", parsed.data.roomName);
-    if (parsed.data.sessionId) {
-      sessionQuery = sessionQuery.eq("id", parsed.data.sessionId);
-    }
-    const { data: session, error: sessionError } = await sessionQuery.maybeSingle();
-    if (
-      sessionError ||
-      !session ||
-      !["connecting", "active", "reconnecting", "flagged"].includes(
-        session.status,
-      ) ||
-      ![session.user_a, session.user_b].includes(parsed.data.speakerId)
-    ) {
-      return NextResponse.json({ error: "Active session access required" }, { status: 403 });
+    const isGroup = parsed.data.roomName.startsWith("vybe_group_");
+    let sessionId = "";
+    let sessionStatus = "";
+    let otherParticipantIds: string[] = [];
+    let eventTable = "video_session_events";
+    let moderationEventTable = "video_moderation_events";
+    let sessionTable = "video_sessions";
+    let sourceType = "video_session";
+
+    if (isGroup) {
+      let query = admin
+        .from("group_video_sessions")
+        .select("id,room_name,status")
+        .eq("room_name", parsed.data.roomName);
+      if (parsed.data.sessionId) query = query.eq("id", parsed.data.sessionId);
+      const { data: session, error: sessionError } = await query.maybeSingle();
+      if (
+        sessionError ||
+        !session ||
+        !["forming", "connecting", "active", "reconnecting", "flagged"].includes(session.status)
+      ) {
+        return NextResponse.json({ error: "Active group session access required" }, { status: 403 });
+      }
+      const { data: participants, error: participantError } = await admin
+        .from("group_video_session_participants")
+        .select("user_id,membership_status")
+        .eq("session_id", session.id)
+        .eq("membership_status", "active");
+      if (
+        participantError ||
+        !(participants || []).some((participant) => participant.user_id === parsed.data.speakerId)
+      ) {
+        return NextResponse.json({ error: "Active group participant required" }, { status: 403 });
+      }
+      sessionId = session.id;
+      sessionStatus = session.status;
+      otherParticipantIds = (participants || [])
+        .map((participant) => String(participant.user_id))
+        .filter((userId) => userId !== parsed.data.speakerId);
+      eventTable = "group_video_session_events";
+      moderationEventTable = "group_video_moderation_events";
+      sessionTable = "group_video_sessions";
+      sourceType = "group_video_session";
+    } else {
+      let query = admin
+        .from("video_sessions")
+        .select("id,room_name,status,user_a,user_b")
+        .eq("room_name", parsed.data.roomName);
+      if (parsed.data.sessionId) query = query.eq("id", parsed.data.sessionId);
+      const { data: session, error: sessionError } = await query.maybeSingle();
+      if (
+        sessionError ||
+        !session ||
+        !["connecting", "active", "reconnecting", "flagged"].includes(session.status) ||
+        ![session.user_a, session.user_b].includes(parsed.data.speakerId)
+      ) {
+        return NextResponse.json({ error: "Active session access required" }, { status: 403 });
+      }
+      sessionId = session.id;
+      sessionStatus = session.status;
+      otherParticipantIds = [session.user_a, session.user_b]
+        .map(String)
+        .filter((userId) => userId !== parsed.data.speakerId);
     }
 
     const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString();
-    const { count } = await admin
-      .from("video_session_events")
+    const { count, error: rateError } = await admin
+      .from(eventTable)
       .select("id", { count: "exact", head: true })
-      .eq("session_id", session.id)
+      .eq("session_id", sessionId)
       .eq("user_id", parsed.data.speakerId)
       .eq("event_type", "speech_safety_sample")
       .gte("created_at", oneMinuteAgo);
+    if (rateError) throw rateError;
     if ((count || 0) >= 30) {
       return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
     }
 
-    const rules = ruleModeration(parsed.data.transcript);
     const moderation = mergeModeration(
-      rules,
+      ruleModeration(parsed.data.transcript),
       await openAiModeration(parsed.data.transcript),
     );
 
     // Raw speech transcripts are intentionally never written to logs, Storage,
     // Postgres, notifications, moderation summaries, or API responses.
-    await admin.from("video_session_events").insert({
-      session_id: session.id,
+    const { error: sampleError } = await admin.from(eventTable).insert({
+      session_id: sessionId,
       user_id: parsed.data.speakerId,
       event_type: "speech_safety_sample",
       metadata: {
@@ -282,6 +338,7 @@ export async function POST(request: NextRequest) {
         provider: moderation.provider,
       },
     });
+    if (sampleError) throw sampleError;
 
     if (!moderation.categories.length) {
       return NextResponse.json(
@@ -294,13 +351,11 @@ export async function POST(request: NextRequest) {
       moderation.hidden ||
       moderation.severity === "high" ||
       moderation.severity === "critical";
-    const otherParticipant =
-      session.user_a === parsed.data.speakerId ? session.user_b : session.user_a;
 
     const { data: moderationEvent, error: moderationError } = await admin
-      .from("video_moderation_events")
+      .from(moderationEventTable)
       .insert({
-        session_id: session.id,
+        session_id: sessionId,
         subject_user_id: parsed.data.speakerId,
         submitted_by: null,
         categories: moderation.categories,
@@ -313,9 +368,9 @@ export async function POST(request: NextRequest) {
       .single();
     if (moderationError) throw moderationError;
 
-    await admin.from("moderation_flags").insert({
-      source_type: "video_session",
-      source_id: session.id,
+    const { error: flagError } = await admin.from("moderation_flags").insert({
+      source_type: sourceType,
+      source_id: sessionId,
       subject_user_id: parsed.data.speakerId,
       reporter_id: null,
       categories: moderation.categories,
@@ -325,20 +380,22 @@ export async function POST(request: NextRequest) {
       provider: moderation.provider,
       raw_scores: moderation.scores,
     });
+    if (flagError) throw flagError;
 
-    await admin
-      .from("video_sessions")
+    const { error: sessionUpdateError } = await admin
+      .from(sessionTable)
       .update({
-        status: severe ? "flagged" : session.status,
+        status: severe ? "flagged" : sessionStatus,
         moderation_state: severe ? "severe" : "flagged",
         hidden_until_review: severe,
         last_activity_at: new Date().toISOString(),
       })
-      .eq("id", session.id)
+      .eq("id", sessionId)
       .neq("status", "ended");
+    if (sessionUpdateError) throw sessionUpdateError;
 
     if (moderation.severity === "critical") {
-      await admin.from("video_restrictions").upsert(
+      const { error: restrictionError } = await admin.from("video_restrictions").upsert(
         {
           user_id: parsed.data.speakerId,
           status: "review_required",
@@ -349,16 +406,20 @@ export async function POST(request: NextRequest) {
         },
         { onConflict: "user_id" },
       );
+      if (restrictionError) throw restrictionError;
     }
 
-    if (severe) {
-      await admin.from("notifications").insert({
-        user_id: otherParticipant,
-        type: "safety",
-        title: "Live video paused for safety",
-        body: "A severe safety signal was detected. The session was hidden and queued for human review.",
-        entity_id: moderationEvent.id,
-      });
+    if (severe && otherParticipantIds.length) {
+      const { error: notificationError } = await admin.from("notifications").insert(
+        otherParticipantIds.map((userId) => ({
+          user_id: userId,
+          type: "safety",
+          title: isGroup ? "Group video paused for safety" : "Live video paused for safety",
+          body: "A severe safety signal was detected. The session was hidden and queued for human review.",
+          entity_id: moderationEvent.id,
+        })),
+      );
+      if (notificationError) throw notificationError;
     }
 
     return NextResponse.json(

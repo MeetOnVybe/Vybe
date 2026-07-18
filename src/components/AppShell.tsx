@@ -39,7 +39,6 @@ export function AppShell({ children, immersive = false }: { children: React.Reac
   const isAdmin = useVybeStore((state) => state.isAdmin);
   const settings = useVybeStore((state) => state.settings);
   const setSetting = useVybeStore((state) => state.setSetting);
-  const dataMode = useVybeStore((state) => state.dataMode);
   const cloudReady = useVybeStore((state) => state.cloudReady);
   const cloudLoading = useVybeStore((state) => state.cloudLoading);
   const cloudError = useVybeStore((state) => state.cloudError);
@@ -118,7 +117,7 @@ export function AppShell({ children, immersive = false }: { children: React.Reac
           transition={{ duration: .24, ease: [0.22, 1, 0.36, 1] }}
           className={immersive ? "relative z-10" : `relative z-10 mx-auto max-w-7xl px-4 pt-7 sm:px-6 ${settings.compactMode ? "pb-24 sm:pb-8" : "pb-32 sm:pb-12"}`}
         >
-          {dataMode === "supabase" && !cloudReady ? (
+          {!cloudReady ? (
             <section className="vybe-card mx-auto grid min-h-[55vh] max-w-xl place-items-center rounded-[32px] p-8 text-center">
               <div>
                 {cloudError ? <CloudOff className="mx-auto text-red-400" size={34} /> : <LoaderCircle className="mx-auto animate-spin text-blue-400" size={34} />}

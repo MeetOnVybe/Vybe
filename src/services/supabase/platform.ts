@@ -2,12 +2,13 @@
 
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { invokeAuthenticatedFunction } from "@/lib/supabase/functions";
 import { getSiteUrl } from "@/lib/data-mode";
 import {
   AVATAR_OPTIONS,
   BANNER_OPTIONS,
   PROFILE_STATUSES,
-} from "@/lib/mock-data";
+} from "@/lib/profile-options";
 import type {
   AuthService,
   CreateStoryInput,
@@ -27,7 +28,7 @@ import type {
   ModerationCase,
   ModerationLog,
   NotificationItem,
-  SimUser,
+  PublicProfile,
   StoryItem,
   UserSettings,
   VybeMatch,
@@ -209,13 +210,13 @@ async function rowToUser(
   client: SupabaseClient,
   row: DiscoveryRow,
   presence?: PresenceRow,
-): Promise<SimUser> {
+): Promise<PublicProfile> {
   const [avatarUrl, bannerUrl] = await Promise.all([
     signedMediaUrl(client, row.avatar_url, "profile-avatars"),
     signedMediaUrl(client, row.banner_url, "profile-banners"),
   ]);
   const status = PROFILE_STATUSES.includes(row.status as never)
-    ? (row.status as SimUser["status"])
+    ? (row.status as PublicProfile["status"])
     : "✨ Looking for new friends";
   const presenceInfo = readablePresence({
     ...presence,
@@ -325,7 +326,9 @@ export const supabaseAuthService: AuthService = {
 };
 
 class SupabasePlatformService implements SocialPlatformService {
-  private client = createClient();
+  private get client() {
+    return createClient();
+  }
   private conversationIdsByUser: Record<string, string> = {};
 
   private async authorizeRealtime() {
@@ -1130,7 +1133,7 @@ class SupabasePlatformService implements SocialPlatformService {
     reason: string,
     notes: string,
     targetType:
-      "profile" | "message" | "story" | "group" | "video_session" = "profile",
+      "profile" | "message" | "story" | "group" | "video_session" | "group_video_session" = "profile",
     targetId?: string,
   ) {
     const { error } = await this.client.rpc("submit_content_report", {
@@ -1159,8 +1162,10 @@ class SupabasePlatformService implements SocialPlatformService {
       }
     }
     if (!conversationId) throw new Error("Conversation is required");
-    const { error } = await this.client.functions.invoke("moderate-content", {
-      body: {
+    await invokeAuthenticatedFunction<{ ok: boolean; hidden: boolean; messageId: string }>(
+      this.client,
+      "moderate-content",
+      {
         action: "send_message",
         conversationId,
         recipientId: input.userId,
@@ -1174,8 +1179,8 @@ class SupabasePlatformService implements SocialPlatformService {
         forwardedFromId: input.forwardedFromId,
         storyId: input.storyId,
       },
-    });
-    assertNoError(error, "Unable to send moderated message");
+      "Unable to send moderated message",
+    );
   }
 
   async uploadConversationMedia(
@@ -1284,16 +1289,18 @@ class SupabasePlatformService implements SocialPlatformService {
     return path;
   }
   async createStory(input: CreateStoryInput) {
-    const { error } = await this.client.functions.invoke("moderate-content", {
-      body: {
+    await invokeAuthenticatedFunction<{ ok: boolean; hidden: boolean; storyId: string }>(
+      this.client,
+      "moderate-content",
+      {
         action: "create_story",
         mediaType: input.mediaType,
         mediaPath: input.mediaPath,
         text: input.text || "",
         backgroundColor: input.backgroundColor,
       },
-    });
-    assertNoError(error, "Unable to publish story");
+      "Unable to publish story",
+    );
   }
   async deleteStory(storyId: string) {
     const { error } = await this.client

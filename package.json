@@ -1,22 +1,23 @@
 {
   "name": "vybe",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:demo": "cross-env NEXT_PUBLIC_VYBE_DATA_MODE=demo next dev",
     "build": "next build",
-    "build:demo": "cross-env NEXT_PUBLIC_VYBE_DATA_MODE=demo next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:security": "node tests/sql-security.test.mjs",
     "test:cloud": "node tests/integration/supabase-phase5.mjs",
-    "test:e2e": "npm run build:demo && node tests/run-browser-suites.mjs",
-    "verify": "npm run lint && npm run typecheck && npm run test:security && npm run build",
+    "test:e2e": "playwright test tests/production-ui.spec.ts",
+    "verify": "npm run lint && npm run typecheck && npm run test:source && npm run test:security && npm run build",
     "test:cloud:friends": "node tests/integration/supabase-two-user.mjs",
     "test:cloud:phase3": "node tests/integration/supabase-three-user.mjs",
-    "test:cloud:video-pairing": "node tests/integration/supabase-video-pairing.mjs"
+    "test:cloud:video-pairing": "node tests/integration/supabase-video-pairing.mjs",
+    "test:cloud:group-video": "node tests/integration/supabase-group-video.mjs",
+    "test:production": "npm run test:source && npm run test:security && npm run test:e2e",
+    "test:source": "node tests/source-contract.test.mjs"
   },
   "dependencies": {
     "@livekit/components-react": "^2.9.23",
@@ -39,7 +40,6 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "cross-env": "^10.1.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",

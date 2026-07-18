@@ -1,132 +1,119 @@
-# VYBE Phase 5 — LiveKit Setup
+# VYBE — LiveKit Production Setup
 
-VYBE uses LiveKit only as the encrypted WebRTC transport for private one-to-one rooms. Supabase remains the source of truth for authentication, age eligibility, queueing, preferences, blocks, session membership, restrictions, moderation state, and audit events.
+LiveKit transports encrypted media for authenticated VYBE Solo and Group sessions. Supabase decides who may enter each room. Browsers never receive the LiveKit API secret.
 
-## 1. Create a LiveKit project
+## 1. Create/select a LiveKit project
 
-Create a LiveKit Cloud project or deploy a compatible self-hosted LiveKit server. Collect:
-
-- WebSocket server URL, such as `wss://YOUR_PROJECT.livekit.cloud`
-- API key
-- API secret
-
-The API key and secret are server-only. Never add them to a `NEXT_PUBLIC_` variable or browser bundle.
-
-## 2. Add server environment variables
-
-In `.env.local` and your Vercel project:
+Collect:
 
 ```dotenv
 LIVEKIT_URL=wss://YOUR_PROJECT.livekit.cloud
-LIVEKIT_API_KEY=YOUR_SERVER_KEY
-LIVEKIT_API_SECRET=YOUR_SERVER_SECRET
-SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVER_ONLY_SUPABASE_SERVICE_ROLE_KEY
+LIVEKIT_API_KEY=YOUR_API_KEY
+LIVEKIT_API_SECRET=YOUR_API_SECRET
 ```
 
-Vercel should have separate Development, Preview, and Production values. Redeploy after changing production variables.
+Add those values to Vercel Development, Preview, and Production environments as server-only variables.
 
-## 3. Configure the verified webhook
+## 2. How VYBE authorizes rooms
 
-Add this HTTPS endpoint in the LiveKit project webhook configuration:
+For Solo Match, `/api/video/token`:
+
+1. verifies the Supabase browser session or bearer token;
+2. reads the exact session through RLS;
+3. confirms the caller is a participant;
+4. creates a short-lived token scoped to one two-person room;
+5. grants publish/subscribe only.
+
+Group Match uses `/api/video/group-token` with the same model and checks membership in the exact group session.
+
+Tokens do not grant room listing, room administration, recording, or arbitrary data publishing.
+
+## 3. Configure the signed webhook
+
+In LiveKit Cloud open **Settings → Webhooks**, create a webhook, and use:
 
 ```text
-https://YOUR_VYBE_DOMAIN/api/livekit/webhook
+https://vybe-taupe-zeta.vercel.app/api/livekit/webhook
 ```
 
-For local webhook testing, expose the local server through a trusted HTTPS tunnel and temporarily configure the tunnel URL.
+Select the same project API key as the signing key. Send a test event after the Vercel deployment.
 
-The route verifies the LiveKit webhook signature before updating participant connection state, session state, queue state, and moderation-safe lifecycle events. Unverified requests are rejected.
+The route verifies the signed authorization header before updating participant connection timestamps, session state, queue cleanup, and lifecycle logs.
 
-## 4. Token authorization model
+## 4. Deploy the non-recording safety worker
 
-The browser requests `/api/video/token?sessionId=...` using its authenticated VYBE session. The server then:
+The worker transcribes final speech segments in memory and sends them to VYBE’s protected server endpoint. It does not save audio or raw transcripts.
 
-1. validates the Supabase user session;
-2. calls `get_video_session_state` through the user's RLS context;
-3. confirms the user belongs to that exact active video session;
-4. creates a short-lived token scoped to the exact LiveKit room;
-5. allows publish/subscribe only;
-6. denies room listing, room administration, arbitrary data publishing, and recording.
-
-A token cannot be used to join another VYBE room.
-
-## 5. Optional visual moderation
-
-Visual moderation uses low-resolution, ephemeral frame samples while a call is active. Enable the client request path only after deploying the `moderate-content` Supabase Edge Function:
+Create a private secrets file outside Git:
 
 ```dotenv
-NEXT_PUBLIC_VIDEO_MODERATION_ENABLED=true
-```
-
-Frames are evaluated in memory and are not uploaded to Storage or inserted into Postgres. Keep it `false` until the trusted moderation function is configured.
-
-## 6. Optional speech-safety worker
-
-The worker in `workers/video-safety-agent` transcribes authorized participants in memory and sends final text segments to a protected VYBE server route. It never records calls, saves audio, or stores raw transcripts.
-
-Generate a long random secret and configure the same value only on VYBE's server and the worker:
-
-```dotenv
+LIVEKIT_URL=wss://YOUR_PROJECT.livekit.cloud
+LIVEKIT_API_KEY=YOUR_API_KEY
+LIVEKIT_API_SECRET=YOUR_API_SECRET
+VYBE_SITE_URL=https://vybe-taupe-zeta.vercel.app
+VIDEO_MODERATION_AGENT_SECRET=THE_SAME_LONG_RANDOM_SECRET_USED_BY_VERCEL
 VIDEO_SAFETY_AGENT_NAME=vybe-video-safety
-VIDEO_MODERATION_AGENT_SECRET=REPLACE_WITH_A_LONG_RANDOM_SECRET
 VYBE_STT_MODEL=deepgram/nova-3-general
-VYBE_SITE_URL=https://YOUR_VYBE_DOMAIN
 ```
 
-The VYBE server also accepts an optional server-only moderation key:
-
-```dotenv
-OPENAI_API_KEY=OPTIONAL_SERVER_ONLY_KEY
-```
-
-The deterministic teen-safety rules remain active without the optional provider.
-
-### Local worker
+Authenticate and deploy:
 
 ```bash
 cd workers/video-safety-agent
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-python agent.py dev
+lk cloud auth
+lk project set-default "YOUR LIVEKIT PROJECT NAME"
+lk agent create --secrets-file .env.production .
 ```
 
-On Windows PowerShell, activate with `.venv\\Scripts\\Activate.ps1`.
-
-### Production worker
-
-Run it as a private long-lived worker process:
+For later releases:
 
 ```bash
-python agent.py start
+lk agent deploy --secrets-file .env.production .
+lk agent status
+lk agent logs --log-type deploy
 ```
 
-A Dockerfile is included. The worker must use the same LiveKit project and `VIDEO_SAFETY_AGENT_NAME` as VYBE. The room token contains only the session ID and authorized participant IDs; it never contains the moderation secret.
+Keep `VIDEO_SAFETY_AGENT_NAME` identical in Vercel and the worker.
 
-## 7. Media behavior
+## 5. Visual moderation
 
-VYBE requests camera and microphone permissions only after the user presses **Start Video Match**. During a call users can independently disable camera or mute microphone. Tracks stop when the session ends or the user leaves.
+Set in Vercel:
 
-The room is configured for two human participants. VYBE does not create group video calls, livestreams, public rooms, recordings, or an anonymous public room directory.
+```dotenv
+NEXT_PUBLIC_VIDEO_MODERATION_ENABLED=true
+OPENAI_API_KEY=YOUR_SERVER_ONLY_KEY
+```
 
-## 8. Network and browser checks
+Frames are sampled only while a session is active, sent through the authenticated Supabase Edge Function, evaluated in memory, and not stored as images or video.
 
-Test on current Chrome, Edge, Safari, and mobile browsers over HTTPS. Camera and microphone APIs require a secure context in production. Confirm:
+## 6. Required media tests
 
-- permission denial shows a recovery message;
-- camera and microphone start promptly after permission;
-- reconnect appears after a network interruption;
-- Next ends the prior Supabase session before requeueing;
-- End stops local tracks and clears queue/session state;
-- remote video stays blurred until the secure connection is established;
-- no call is possible between different age brackets or blocked users.
+Use HTTPS in production and two separate browser profiles.
 
-## 9. Troubleshooting
+### Solo
 
-- **503 from token route:** LiveKit server variables are missing.
-- **403 from token route:** the user is not an authorized participant, the profile is incomplete, or the session ended.
-- **Room connects but state does not update:** verify the webhook URL and LiveKit credentials.
-- **Safety worker does not join:** verify the named worker is running and `VIDEO_SAFETY_AGENT_NAME` matches.
-- **Visual moderation does nothing:** deploy the Supabase Edge Function and enable `NEXT_PUBLIC_VIDEO_MODERATION_ENABLED`.
-- **Camera unavailable:** use HTTPS, verify OS/browser permissions, and close other applications holding the camera.
+1. A and B join with compatible same-bracket settings.
+2. Both receive the same Supabase session ID.
+3. Both token responses decode to the same room and correct user identity.
+4. Both see/hear each other.
+5. Mute, camera toggle, quality, timer, reconnect, Next, Report, Block, and End work.
+6. Ending clears active queue/session state.
+7. A connected pair is protected from immediate repeat; a never-connected stale attempt is not counted as a completed encounter.
+
+### Group
+
+1. At least two eligible same-bracket accounts join.
+2. They receive the same group session and room.
+3. Up to four authorized participants can join.
+4. A different age bracket cannot enter.
+5. Leaving removes that participant without authorizing outsiders.
+6. The room ends/cleans up when the session is no longer viable.
+
+## 7. Troubleshooting
+
+**Token route returns 503** — LiveKit server variables are missing in the current Vercel environment.  
+**Token route returns 401** — the Supabase session expired or is missing.  
+**Token route returns 403** — the user is not a member, the session ended, the profile is incomplete, or an enforcement rule denies access.  
+**Room connects but Supabase stays `connecting`** — verify the LiveKit webhook URL and signing key.  
+**Safety worker never joins** — verify its deployed status, dispatch name, and project.  
+**Camera works locally but not on a domain** — confirm HTTPS, browser/OS permissions, and that another application is not holding the device.

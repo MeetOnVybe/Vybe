@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowRight, Check } from "lucide-react";
 import { Logo } from "@/components/Logo";
-import { INTERESTS } from "@/lib/mock-data";
+import { INTERESTS } from "@/lib/profile-options";
 import { useVybeStore } from "@/store/useVybeStore";
 
 export default function InterestSetupPage() {

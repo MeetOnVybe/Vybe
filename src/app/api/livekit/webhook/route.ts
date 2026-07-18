@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasSupabaseEnv } from "@/lib/data-mode";
 import { WebhookReceiver } from "livekit-server-sdk";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -6,6 +7,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  if (!hasSupabaseEnv() || !process.env.SUPABASE_SERVICE_ROLE_KEY)
+    return NextResponse.json({ error: "Supabase webhook access is not configured" }, { status: 503 });
   try {
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -24,6 +27,100 @@ export async function POST(request: NextRequest) {
     if (!roomName?.startsWith("vybe_")) return NextResponse.json({ ok: true });
 
     const admin = createAdminClient();
+    if (roomName.startsWith("vybe_group_")) {
+      const { data: groupSession } = await admin
+        .from("group_video_sessions")
+        .select("id,status")
+        .eq("room_name", roomName)
+        .maybeSingle();
+      if (!groupSession) return NextResponse.json({ ok: true });
+      const participantId = event.participant?.identity || null;
+      const now = new Date().toISOString();
+      if (event.event === "participant_joined" && participantId) {
+        await admin
+          .from("group_video_session_participants")
+          .update({
+            connected_at: now,
+            disconnected_at: null,
+            last_heartbeat_at: now,
+            membership_status: "active",
+          })
+          .eq("session_id", groupSession.id)
+          .eq("user_id", participantId);
+        const { count } = await admin
+          .from("group_video_session_participants")
+          .select("user_id", { count: "exact", head: true })
+          .eq("session_id", groupSession.id)
+          .eq("membership_status", "active")
+          .not("connected_at", "is", null)
+          .is("disconnected_at", null);
+        if ((count || 0) >= 2) {
+          await admin
+            .from("group_video_sessions")
+            .update({ status: "active", connected_at: now, last_activity_at: now })
+            .eq("id", groupSession.id)
+            .neq("status", "ended");
+        }
+      }
+      if (
+        (event.event === "participant_left" ||
+          event.event === "participant_connection_aborted") &&
+        participantId
+      ) {
+        await admin
+          .from("group_video_session_participants")
+          .update({ disconnected_at: now, connection_quality: "lost" })
+          .eq("session_id", groupSession.id)
+          .eq("user_id", participantId);
+        const { count } = await admin
+          .from("group_video_session_participants")
+          .select("user_id", { count: "exact", head: true })
+          .eq("session_id", groupSession.id)
+          .eq("membership_status", "active")
+          .not("connected_at", "is", null)
+          .is("disconnected_at", null);
+        await admin
+          .from("group_video_sessions")
+          .update({
+            status: (count || 0) >= 2 ? "active" : "reconnecting",
+            last_activity_at: now,
+          })
+          .eq("id", groupSession.id)
+          .neq("status", "ended");
+      }
+      if (event.event === "room_finished") {
+        await admin
+          .from("group_video_sessions")
+          .update({
+            status: "ended",
+            ended_at: now,
+            end_reason: "room_finished",
+            last_activity_at: now,
+          })
+          .eq("id", groupSession.id)
+          .neq("status", "ended");
+        await admin
+          .from("group_video_session_participants")
+          .update({ disconnected_at: now, connection_quality: "lost" })
+          .eq("session_id", groupSession.id);
+        await admin
+          .from("group_video_match_queue")
+          .update({ status: "cancelled", session_id: null, updated_at: now })
+          .eq("session_id", groupSession.id);
+      }
+      await admin.from("group_video_session_events").insert({
+        session_id: groupSession.id,
+        user_id: participantId,
+        event_type: `livekit_${event.event || "event"}`,
+        metadata: {
+          livekitEvent: event.event,
+          participantIdentity: participantId,
+          trackSource: event.track?.source || null,
+        },
+      });
+      return NextResponse.json({ ok: true });
+    }
+
     const { data: session } = await admin
       .from("video_sessions")
       .select("id,status,user_a,user_b")

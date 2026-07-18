@@ -10,16 +10,14 @@ import { AppShell } from "@/components/AppShell";
 import { Avatar } from "@/components/Avatar";
 import { matchPercent } from "@/components/MatchPanel";
 import { BlockModal, ReportModal } from "@/components/Modals";
-import { SIM_USERS } from "@/lib/mock-data";
 import { useVybeStore } from "@/store/useVybeStore";
 
 function ProfileFact({ icon: Icon, label, value }: { icon: typeof Headphones; label: string; value: string }) { return <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><Icon size={18} className="text-blue-500" /><p className="mt-3 text-[10px] font-black uppercase tracking-wider text-[var(--muted)]">{label}</p><p className="mt-1 text-sm font-bold">{value}</p></div>; }
 
 export default function SimProfilePage() {
   const params = useParams<{ id: string }>();
-  const dataMode = useVybeStore((state) => state.dataMode);
   const people = useVybeStore((state) => state.people);
-  const user = (dataMode === "demo" ? SIM_USERS : people).find((item) => item.id === params.id);
+  const user = people.find((item) => item.id === params.id);
   const interests = useVybeStore((state) => state.interests);
   const friendStatus = useVybeStore((state) => state.friendStatuses[params.id]);
   const matchStatus = useVybeStore((state) => state.matchStatuses[params.id]);
@@ -81,7 +79,7 @@ export default function SimProfilePage() {
       </div>
 
       <section className="mt-5 grid gap-4 sm:grid-cols-2">
-        <div className="vybe-card rounded-[26px] p-5"><ShieldCheck className="text-blue-500" /><h2 className="mt-4 font-black">{dataMode === "supabase" ? "Database-calculated age bracket" : "Age bracket verified locally"}</h2><p className="mt-2 text-xs leading-5 text-[var(--muted)]">{dataMode === "supabase" ? "Discovery and search policies only expose profiles in your database-calculated age bracket." : "This simulated profile is only available to users in the same bracket."}</p></div>
+        <div className="vybe-card rounded-[26px] p-5"><ShieldCheck className="text-blue-500" /><h2 className="mt-4 font-black">Database-calculated age bracket</h2><p className="mt-2 text-xs leading-5 text-[var(--muted)]">Discovery and search policies only expose profiles in your database-calculated age bracket.</p></div>
         <div className="vybe-card rounded-[26px] p-5"><Sparkles className="text-blue-500" /><h2 className="mt-4 font-black">Personality</h2><p className="mt-2 text-xs leading-5 text-[var(--text-secondary)]">{user.personality}</p></div>
       </section>
 

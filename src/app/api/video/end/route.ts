@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasSupabaseEnv } from "@/lib/data-mode";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  if (!hasSupabaseEnv())
+    return NextResponse.json({ error: "Supabase is not configured" }, { status: 503 });
   try {
     const { sessionId, reason = "disconnect" } = await request.json();
     if (!sessionId)
